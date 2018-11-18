@@ -1951,7 +1951,7 @@
 					"$(PROJECT_DIR)/Frameworks",
 				);
 				OTHER_LDFLAGS = "-ObjC";
-				PRODUCT_BUNDLE_IDENTIFIER = com.jaydenkerr.blink;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jaydenkerr.blinkTerminal;
 				PRODUCT_NAME = Blink;
 				PROVISIONING_PROFILE = "";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -1988,7 +1988,7 @@
 					"$(PROJECT_DIR)/Frameworks",
 				);
 				OTHER_LDFLAGS = "-ObjC";
-				PRODUCT_BUNDLE_IDENTIFIER = com.jaydenkerr.blink;
+				PRODUCT_BUNDLE_IDENTIFIER = com.jaydenkerr.blinkTerminal;
 				PRODUCT_NAME = Blink;
 				PROVISIONING_PROFILE = "ef71f761-fcc0-457d-ad7c-07e520594656";
 				PROVISIONING_PROFILE_SPECIFIER = "";
