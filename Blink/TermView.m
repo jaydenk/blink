@@ -114,7 +114,7 @@ struct winsize __winSizeFromJSON(NSDictionary *json) {
   self.opaque = YES;
   _webView.opaque = YES;
   
-  UIImageView *imageView = [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, frame.size.width, frame.size.height)];
+  UIImageView *imageView = [[UIImageView alloc] initWithFrame:[self _webViewFrame]];
   imageView.contentMode = UIViewContentModeTop | UIViewContentModeLeft;
   imageView.autoresizingMask =  UIViewAutoresizingNone;
   
@@ -147,18 +147,25 @@ struct winsize __winSizeFromJSON(NSDictionary *json) {
     if (@available(iOS 11.0, *)) {
       [_webView takeSnapshotWithConfiguration:nil completionHandler:^(UIImage * _Nullable snapshotImage, NSError * _Nullable error) {
         _snapshotImageView.image = snapshotImage;
-        _snapshotImageView.frame = self.bounds;
+        _snapshotImageView.frame = [self _webViewFrame];
         _snapshotImageView.alpha = 1;
         [self addSubview:_snapshotImageView];
         [_webView removeFromSuperview];
       }];
     } else {
       // Blank screen for ios 10?
-      _snapshotImageView.frame = self.bounds;
+      _snapshotImageView.frame = [self _webViewFrame];
       [self addSubview:_snapshotImageView];
       [_webView removeFromSuperview];
     }
   });
+}
+
+- (CGRect)_webViewFrame {
+  CGRect frame = self.bounds;
+  frame.origin = CGPointMake(5, 5);
+  frame.size.width -= 10;
+  return frame;
 }
 
 - (void)_didBecomeActive
@@ -168,13 +175,9 @@ struct winsize __winSizeFromJSON(NSDictionary *json) {
       return;
     }
     
-    _webView.frame = self.bounds;
+    _webView.frame = [self _webViewFrame];
     [self insertSubview:_webView belowSubview:_snapshotImageView];
-    [UIView animateWithDuration:0.2 delay:0.0 options:kNilOptions animations:^{
-      _snapshotImageView.alpha = 0;
-    } completion:^(BOOL finished) {
-      [_snapshotImageView removeFromSuperview];
-    }];
+    [_snapshotImageView removeFromSuperview];
   });
 }
 
@@ -188,7 +191,7 @@ struct winsize __winSizeFromJSON(NSDictionary *json) {
   configuration.selectionGranularity = WKSelectionGranularityCharacter;
   [configuration.userContentController addScriptMessageHandler:self name:@"interOp"];
 
-  _webView = [[BKWebView alloc] initWithFrame:self.bounds configuration:configuration];
+  _webView = [[BKWebView alloc] initWithFrame:[self _webViewFrame] configuration:configuration];
   
   _webView.scrollView.delaysContentTouches = NO;
   _webView.scrollView.canCancelContentTouches = NO;
@@ -224,7 +227,7 @@ struct winsize __winSizeFromJSON(NSDictionary *json) {
 
 - (void)reloadWith:(MCPSessionParameters *)params;
 {
-  _snapshotImageView.frame = self.bounds;
+  _snapshotImageView.frame = [self _webViewFrame];
   [self addSubview:_snapshotImageView];
   _snapshotImageView.alpha = 1;
   [_webView.configuration.userContentController removeAllUserScripts];

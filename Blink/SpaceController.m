@@ -162,6 +162,10 @@
   return NO;
 }
 
+- (BOOL)prefersHomeIndicatorAutoHidden {
+  return YES;
+}
+
 - (void)_attachInputToCurrentTerm
 {
   [self.currentDevice attachInput:_termInput];
