@@ -156,10 +156,10 @@
 {
   return YES;
 }
-
+// RETURN HERE TO CHANGE STATUS BAR
 - (BOOL)prefersStatusBarHidden
 {
-  return YES;
+  return NO;
 }
 
 - (void)_attachInputToCurrentTerm
