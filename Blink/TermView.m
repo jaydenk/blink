@@ -44,6 +44,8 @@ struct winsize __winSizeFromJSON(NSDictionary *json) {
   struct winsize res;
   res.ws_col = [json[@"cols"] integerValue];
   res.ws_row = [json[@"rows"] integerValue];
+  res.ws_xpixel = 0;
+  res.ws_ypixel = 0;
   
   return res;
 }
@@ -164,7 +166,8 @@ struct winsize __winSizeFromJSON(NSDictionary *json) {
 - (CGRect)_webViewFrame {
   CGRect frame = self.bounds;
   frame.origin = CGPointMake(5, 5);
-  frame.size.width -= 10;
+  frame.size.width -= frame.origin.x * 2;
+  frame.size.height -= frame.origin.y;
   return frame;
 }
 

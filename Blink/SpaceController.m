@@ -78,8 +78,6 @@
 {
   [super loadView];
   
-  
-  
   self.view.opaque = YES;
   
   NSDictionary *options = [NSDictionary dictionaryWithObject:
@@ -119,19 +117,22 @@
   
   CGRect rect = self.view.bounds;
   
+  // We want overlay full screen.
+  _touchOverlay.frame = UIEdgeInsetsInsetRect(rect, _rootLayoutMargins);
+  
   if (@available(iOS 11.0, *)) {
     UIEdgeInsets insets = self.view.safeAreaInsets;
     insets.bottom = MAX(_rootLayoutMargins.bottom, insets.bottom);
     if (insets.bottom == 0) {
       insets.bottom = 1;
     }
+
     rect = UIEdgeInsetsInsetRect(rect, insets);
   } else {
     rect = UIEdgeInsetsInsetRect(rect, _rootLayoutMargins);
   }
   
   _viewportsController.view.frame = rect;
-  _touchOverlay.frame = rect;
 }
 
 - (void)viewDidLoad
@@ -300,7 +301,7 @@
   CGFloat bottomInset = 0;
   
   CGRect kbFrame = [sender.userInfo[UIKeyboardFrameEndUserInfoKey] CGRectValue];
-  NSTimeInterval duration = [sender.userInfo[UIKeyboardAnimationDurationUserInfoKey] doubleValue];
+//  NSTimeInterval duration = [sender.userInfo[UIKeyboardAnimationDurationUserInfoKey] doubleValue];
   
   CGFloat viewHeight = CGRectGetHeight(self.view.bounds);
   if (CGRectGetMaxY(kbFrame) >= viewHeight) {
@@ -326,6 +327,9 @@
   
   if (accessoryView.hidden) {
     bottomInset -= accessoryHeight;
+    if (bottomInset < 0) {
+      bottomInset = 0;
+    }
     _termInput.softwareKB = NO;
   }
   
@@ -334,13 +338,6 @@
     
     [self.view setNeedsLayout];
     [self.view layoutIfNeeded];
-    
-    // Workaround broken KB... suspend tap recognizers for a little bit;
-    _touchOverlay.oneFingerTapGestureRecognizer.enabled = NO;
-    
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (duration + 0.3) * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-      _touchOverlay.oneFingerTapGestureRecognizer.enabled = YES;
-    });
   }
 }
 
