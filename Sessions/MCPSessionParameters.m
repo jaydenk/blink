@@ -44,6 +44,9 @@ NSString * const EnableBoldKey = @"enableBold";
 NSString * const BoldAsBrightKey = @"boldAsBright";
 NSString * const ViewWidth = @"viewWidth";
 NSString * const ViewHeight = @"viewHeight";
+NSString * const LayoutMode = @"layoutMode";
+NSString * const LayoutLocked = @"layoutLocked";
+NSString * const LayoutLockedFrame = @"layoutLockedFrame";
 
 @implementation MCPSessionParameters
 
@@ -64,6 +67,9 @@ NSString * const ViewHeight = @"viewHeight";
     self.boldAsBright = [aDecoder decodeBoolForKey:BoldAsBrightKey];
     self.viewWidth = [aDecoder decodeFloatForKey:ViewWidth];
     self.viewHeight = [aDecoder decodeFloatForKey:ViewHeight];
+    self.layoutMode = (BKLayoutMode)[aDecoder decodeIntegerForKey:LayoutMode];
+    self.layoutLocked = [aDecoder decodeBoolForKey:LayoutLocked];
+    self.layoutLockedFrame = [aDecoder decodeCGRectForKey:LayoutLockedFrame];
   }
   
   return self;
@@ -83,6 +89,9 @@ NSString * const ViewHeight = @"viewHeight";
   [coder encodeBool:_boldAsBright forKey:BoldAsBrightKey];
   [coder encodeFloat:_viewWidth forKey:ViewWidth];
   [coder encodeFloat:_viewHeight forKey:ViewHeight];
+  [coder encodeInteger:_layoutMode forKey:LayoutMode];
+  [coder encodeBool:_layoutLocked forKey:LayoutLocked];
+  [coder encodeCGRect:_layoutLockedFrame forKey:LayoutLockedFrame];
 }
 
 + (BOOL)supportsSecureCoding

@@ -1,4 +1,4 @@
-////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////
 //
 // B L I N K
 //
@@ -29,37 +29,41 @@
 //
 ////////////////////////////////////////////////////////////////////////////////
 
+
+#import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
+#import "BKDefaults.h"
 
-#import "TermDevice.h"
-#import "MCPSessionParameters.h"
-#import "StateManager.h"
+NS_ASSUME_NONNULL_BEGIN
 
+@interface SafeLayoutViewController: UIViewController
 
-@class TermController;
+@property (readonly) UIEdgeInsets kbSafeMargins;
+@property (readonly) UIEdgeInsets deviceSafeMargins;
 
-@protocol TermControlDelegate <NSObject>
+- (void)updateKbBottomSafeMargins:(CGFloat)bottomInset;
+- (void)updateDeviceSafeMarings:(UIEdgeInsets)deviceMargins;
 
-- (void)terminalHangup:(TermController *)control;
-- (void)terminalDidResize:(TermController*)control;
+@end
+
+@interface UIViewController ( SafeLayout )
+
+@property (readonly) UIEdgeInsets viewKbSafeMargins;
+@property (readonly) UIEdgeInsets viewDeviceSafeMargins;
+
+- (void)viewKbMarginsDidChange;
+- (void)viewDeviceMarginsDidChange;
 
 @end
 
-@interface TermController : UIViewController<SecureRestoration>
-@property (readonly, strong, nonatomic) TermDevice *termDevice;
-@property (weak) id<TermControlDelegate> delegate;
-@property (strong, nonatomic) NSString* activityKey;
-@property (strong) NSString* sessionStateKey;
-@property (strong) MCPSessionParameters *sessionParameters;
-@property (strong, nonatomic) UIColor *bgColor;
 
-- (void)lockLayout;
-- (void)unlockLayout;
-- (void)terminate;
-- (void)suspend;
-- (void)resume;
-- (void)scaleWithPich:(UIPinchGestureRecognizer *)pinch;
-- (bool)canRestoreUserActivityState:(NSUserActivity *)activity;
-- (bool)isRunningCmd;
+@interface LayoutManager: NSObject
+
+
++ (BKLayoutMode) deviceDefaultLayoutMode;
++ (UIEdgeInsets) buildSafeInsetsForController:(UIViewController *)ctrl andMode:(BKLayoutMode) mode;
++ (NSString *) layoutModeToString:(BKLayoutMode)mode;
 
 @end
+
+NS_ASSUME_NONNULL_END

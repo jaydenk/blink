@@ -29,8 +29,8 @@
 //
 ////////////////////////////////////////////////////////////////////////////////
 
-#import "SpaceController.h"
 #import "BKDefaults.h"
+#import "SpaceController.h"
 #import "BKSettingsNotifications.h"
 #import "BKUserConfigurationManager.h"
 #import "MBProgressHUD/MBProgressHUD.h"
@@ -68,9 +68,11 @@
 
   NSMutableArray<UIKeyCommand *> *_kbdCommands;
   NSMutableArray<UIKeyCommand *> *_kbdCommandsWithoutDiscoverability;
-  UIEdgeInsets _rootLayoutMargins;
   TermInput *_termInput;
   BOOL _unfocused;
+  NSTimer *_activeTimer;
+  CGFloat _proposedKBBottomInset;
+  BOOL _active;
 }
 
 #pragma mark Setup
@@ -93,13 +95,13 @@
   _viewportsController.delegate = self;
   
   [self addChildViewController:_viewportsController];
+  _viewportsController.view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
   _viewportsController.view.layoutMargins = UIEdgeInsetsZero;
   _viewportsController.view.frame = self.view.bounds;
   [self.view addSubview:_viewportsController.view];
   [_viewportsController didMoveToParentViewController:self];
   
   _touchOverlay = [[TouchOverlay alloc] initWithFrame:self.view.bounds];
-  
   [self.view addSubview:_touchOverlay];
   _touchOverlay.touchDelegate = self;
   _touchOverlay.controlPanel.controlPanelDelegate = self;
@@ -111,28 +113,20 @@
   
 }
 
-- (void)viewWillLayoutSubviews
-{
-  [super viewWillLayoutSubviews];
-  
-  CGRect rect = self.view.bounds;
-  
-  // We want overlay full screen.
-  _touchOverlay.frame = UIEdgeInsetsInsetRect(rect, _rootLayoutMargins);
-  
-  if (@available(iOS 11.0, *)) {
-    UIEdgeInsets insets = self.view.safeAreaInsets;
-    insets.bottom = MAX(_rootLayoutMargins.bottom, insets.bottom);
-    if (insets.bottom == 0) {
-      insets.bottom = 1;
-    }
+- (void)viewDidLayoutSubviews {
+  [super viewDidLayoutSubviews];
 
-    rect = UIEdgeInsetsInsetRect(rect, insets);
+  if (self.view.window.screen == UIScreen.mainScreen) {
+    UIEdgeInsets insets =  UIEdgeInsetsMake(0, 0, _proposedKBBottomInset, 0);
+    _touchOverlay.frame = UIEdgeInsetsInsetRect(self.view.bounds, insets);
   } else {
-    rect = UIEdgeInsetsInsetRect(rect, _rootLayoutMargins);
+    _touchOverlay.frame = self.view.bounds;
   }
-  
-  _viewportsController.view.frame = rect;
+}
+
+- (void)viewSafeAreaInsetsDidChange {
+  [super viewSafeAreaInsetsDidChange];
+  [self updateDeviceSafeMarings:self.view.safeAreaInsets];
 }
 
 - (void)viewDidLoad
@@ -150,6 +144,20 @@
     
     UIDropInteraction *termInputDropInteraction = [[UIDropInteraction alloc] initWithDelegate:self];
     [_termInput addInteraction:termInputDropInteraction];
+  }
+}
+
+- (void)viewDidAppear:(BOOL)animated
+{
+  [super viewDidAppear:animated];
+
+  if ([_termInput isFirstResponder]) {
+    [self _attachInputToCurrentTerm];
+    return;
+  }
+
+  if (!_unfocused) {
+    [self _focusOnShell];
   }
 }
 
@@ -229,6 +237,19 @@
   [coder encodeObject:self.view.backgroundColor forKey:@"bgColor"];
 }
 
+//applicationFinishedRestoringState
+
+- (void)applicationFinishedRestoringState {
+    if ([_termInput isFirstResponder]) {
+      [self _attachInputToCurrentTerm];
+      return;
+    }
+  
+    if (!_unfocused) {
+      [self _focusOnShell];
+    }
+}
+
 - (void)registerForNotifications
 {
   NSNotificationCenter *defaultCenter = [NSNotificationCenter defaultCenter];
@@ -269,26 +290,37 @@
 
 - (void)_appDidBecomeActive
 {
-  if ([_termInput isFirstResponder]) {
-    [self _attachInputToCurrentTerm];
-    return;
-  }
-
-  if (!_unfocused) {
-    [self _focusOnShell];
-  }
+  [_activeTimer invalidate];
+  _activeTimer = [NSTimer scheduledTimerWithTimeInterval:0.15 target:self selector:@selector(_delayedDidBecomeActive) userInfo:nil repeats:NO];
 }
 
-- (void)_focusOnShell
+- (void)_delayedDidBecomeActive
 {
-  [_termInput becomeFirstResponder];
-  [self _attachInputToCurrentTerm];
+  [_activeTimer invalidate];
+  _activeTimer = nil;
+  
+  _active = YES;
 }
 
 -(void)_appWillResignActive
 {
+  if (_activeTimer) {
+    [_activeTimer invalidate];
+    _activeTimer = nil;
+    return;
+  }
+  
+  _active = NO;
   _unfocused = ![_termInput isFirstResponder];
 }
+
+- (void)_focusOnShell
+{
+  _active = YES;
+  [_termInput becomeFirstResponder];
+  [self _attachInputToCurrentTerm];
+}
+
 
 
 #pragma mark Events
@@ -310,8 +342,8 @@
   
   UIView *accessoryView = _termInput.inputAccessoryView;
   CGFloat accessoryHeight = accessoryView.frame.size.height;
-  
-  if (bottomInset > accessoryHeight) {
+  NSLog(@"accessory view: %@", accessoryView);
+  if (bottomInset > 80) {
     accessoryView.hidden = NO;
     _termInput.softwareKB = YES;
   } else if (bottomInset == accessoryHeight) {
@@ -333,12 +365,13 @@
     _termInput.softwareKB = NO;
   }
   
-  if (_rootLayoutMargins.bottom != bottomInset) {
-    _rootLayoutMargins.bottom = bottomInset;
-    
+  _proposedKBBottomInset = bottomInset;
+  
+  if (!_active) {
     [self.view setNeedsLayout];
-    [self.view layoutIfNeeded];
+    return;
   }
+  [self updateKbBottomSafeMargins:bottomInset];
 }
 
 - (UIViewController *)pageViewController:(UIPageViewController *)pageViewController
@@ -406,7 +439,7 @@
 
   [_hud hideAnimated:NO];
 
-  _musicHUD = [MBProgressHUD showHUDAddedTo:_viewportsController.view animated:YES];
+  _musicHUD = [MBProgressHUD showHUDAddedTo:_touchOverlay animated:YES];
   _musicHUD.mode = MBProgressHUDModeCustomView;
   _musicHUD.bezelView.style = MBProgressHUDBackgroundStyleSolidColor;
   _musicHUD.bezelView.color = [UIColor clearColor];
@@ -438,7 +471,7 @@
     self.view.window.backgroundColor = currentTerm.view.backgroundColor;
   }
 
-  _hud = [MBProgressHUD showHUDAddedTo:_viewportsController.view animated:_hud == nil];
+  _hud = [MBProgressHUD showHUDAddedTo:_touchOverlay animated:_hud == nil];
   _hud.mode = MBProgressHUDModeCustomView;
   _hud.bezelView.color = [UIColor darkGrayColor];
   _hud.contentColor = [UIColor whiteColor];
@@ -467,6 +500,8 @@
   }
 
   [_hud hideAnimated:YES afterDelay:1.f];
+  
+  [_touchOverlay.controlPanel updateLayoutBar];
 }
 
 - (void)closeCurrentSpace
@@ -689,6 +724,14 @@
 
 - (void)otherScreen:(UIKeyCommand *)cmd
 {
+  if ([UIScreen screens].count == 1) {
+    if (_termInput.isFirstResponder) {
+      [_termInput resignFirstResponder];
+    } else {
+      [self _focusOnShell];
+    }
+    return;
+  }
   [[ScreenController shared] switchToOtherScreen];
 }
 

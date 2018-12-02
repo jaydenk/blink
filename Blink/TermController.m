@@ -36,6 +36,7 @@
 #import "Session.h"
 #import "StateManager.h"
 #import "TermView.h"
+#import "LayoutManager.h"
 
 
 NSString * const BKUserActivityTypeCommandLine = @"com.blink.cmdline";
@@ -158,22 +159,14 @@ NSString * const BKUserActivityCommandLineKey = @"com.blink.cmdline.key";
   _sessionParameters.themeName = [BKDefaults selectedThemeName];
   _sessionParameters.enableBold = [BKDefaults enableBold];
   _sessionParameters.boldAsBright = [BKDefaults isBoldAsBright];
-  _sessionParameters.viewWidth = self.view.bounds.size.width;
-  _sessionParameters.viewHeight = self.view.bounds.size.height;
+  CGSize size = self.view.bounds.size;
+  _sessionParameters.viewWidth = size.width;
+  _sessionParameters.viewHeight = size.height;
+  _sessionParameters.layoutMode = BKDefaults.layoutMode;
 }
 
 - (void)startSession
 {
-  TermInput *input = _termDevice.input;
-  _termDevice = [[TermDevice alloc] init];
-  _termDevice->win.ws_col = _sessionParameters.cols;
-  _termDevice->win.ws_row = _sessionParameters.rows;
-  
-  _termDevice.delegate = self;
-
-  [_termDevice attachView:_termView];
-  [_termDevice attachInput:input];
-
   _session = [[MCPSession alloc] initWithDevice:_termDevice andParametes:_sessionParameters];
   _session.delegate = self;
   [_session executeWithArgs:@""];
@@ -185,6 +178,7 @@ NSString * const BKUserActivityCommandLineKey = @"com.blink.cmdline.key";
   [_termDevice attachView:nil];
   _termDevice = nil;
   _session.device = nil;
+  _session.stream = nil;
   _session = nil;
   [self.userActivity resignCurrent];
 }
@@ -242,9 +236,32 @@ NSString * const BKUserActivityCommandLineKey = @"com.blink.cmdline.key";
   return self;
 }
 
+- (void)viewWillLayoutSubviews {
+  [super viewWillLayoutSubviews];
+  _termView.additionalInsets = [LayoutManager
+                                buildSafeInsetsForController:self
+                                andMode:_sessionParameters.layoutMode];
+  _termView.layoutLockedFrame = _sessionParameters.layoutLockedFrame;
+  _termView.layoutLocked = _sessionParameters.layoutLocked;
+}
+
 - (void)viewDidLayoutSubviews
 {
   [super viewDidLayoutSubviews];
+
+  CGSize size = self.view.bounds.size;
+  _sessionParameters.viewWidth = size.width;
+  _sessionParameters.viewHeight = size.height;
+}
+
+- (void)lockLayout {
+  _sessionParameters.layoutLocked = YES;
+  _sessionParameters.layoutLockedFrame = [_termView webViewFrame];
+}
+
+- (void)unlockLayout {
+  _sessionParameters.layoutLocked = NO;
+  [self.view setNeedsLayout];
 }
 
 #pragma mark Notifications
@@ -259,10 +276,6 @@ NSString * const BKUserActivityCommandLineKey = @"com.blink.cmdline.key";
 - (void)suspend
 {
   [_sessionParameters cleanEncodedState];
-  
-  _sessionParameters.viewWidth = self.view.bounds.size.width;
-  _sessionParameters.viewHeight = self.view.bounds.size.height;
-  
   [_session suspend];
 }
 
@@ -271,11 +284,24 @@ NSString * const BKUserActivityCommandLineKey = @"com.blink.cmdline.key";
   if (![_sessionParameters hasEncodedState]) {
     return;
   }
+  
+  TermInput *input = _termDevice.input;
+  
+  _termDevice = [[TermDevice alloc] init];
+  _termDevice->win.ws_col = _sessionParameters.cols;
+  _termDevice->win.ws_row = _sessionParameters.rows;
+  
+  _termDevice.delegate = self;
+  
+  [_termDevice attachView:_termView];
+  [_termDevice attachInput:input];
 
   [self startSession];
   
-  if (self.view.bounds.size.width != _sessionParameters.viewWidth ||
-      self.view.bounds.size.height != _sessionParameters.viewHeight) {
+  CGSize size = self.view.bounds.size;
+  
+  if (size.width != _sessionParameters.viewWidth ||
+      size.height != _sessionParameters.viewHeight) {
     [_session sigwinch];
   }
 }

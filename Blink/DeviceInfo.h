@@ -1,4 +1,4 @@
-////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////
 //
 // B L I N K
 //
@@ -29,37 +29,25 @@
 //
 ////////////////////////////////////////////////////////////////////////////////
 
-#import <UIKit/UIKit.h>
 
-#import "TermDevice.h"
-#import "MCPSessionParameters.h"
-#import "StateManager.h"
+#import <Foundation/Foundation.h>
 
+NS_ASSUME_NONNULL_BEGIN
 
-@class TermController;
+@interface DeviceInfo : NSObject
 
-@protocol TermControlDelegate <NSObject>
++ (DeviceInfo *)shared;
 
-- (void)terminalHangup:(TermController *)control;
-- (void)terminalDidResize:(TermController*)control;
+@property (readonly) NSString *sysname;
+@property (readonly) NSString *nodename;
+@property (readonly) NSString *release_;
+@property (readonly) NSString *version;
+@property (readonly) NSString *machine;
+@property (readonly) NSString *marketingName;
 
-@end
-
-@interface TermController : UIViewController<SecureRestoration>
-@property (readonly, strong, nonatomic) TermDevice *termDevice;
-@property (weak) id<TermControlDelegate> delegate;
-@property (strong, nonatomic) NSString* activityKey;
-@property (strong) NSString* sessionStateKey;
-@property (strong) MCPSessionParameters *sessionParameters;
-@property (strong, nonatomic) UIColor *bgColor;
-
-- (void)lockLayout;
-- (void)unlockLayout;
-- (void)terminate;
-- (void)suspend;
-- (void)resume;
-- (void)scaleWithPich:(UIPinchGestureRecognizer *)pinch;
-- (bool)canRestoreUserActivityState:(NSUserActivity *)activity;
-- (bool)isRunningCmd;
+@property (readonly) BOOL hasNotch;
+@property (readonly) BOOL hasCorners;
 
 @end
+
+NS_ASSUME_NONNULL_END
