@@ -89,7 +89,7 @@
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>66</string>
+	<string>67</string>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>blinkshell</string>
@@ -138,8 +138,10 @@
 	<array>
 		<string>armv7</string>
 	</array>
+	<key>UIStatusBarHidden</key>
+	<true/>
 	<key>UIStatusBarStyle</key>
-	<string>UIStatusBarStyleBlackTranslucent</string>
+	<string>UIStatusBarStyleLightContent</string>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationLandscapeRight</string>
