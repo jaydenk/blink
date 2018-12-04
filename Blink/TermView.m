@@ -170,8 +170,6 @@ struct winsize __winSizeFromJSON(NSDictionary *json) {
     return;
   }
   
-  NSLog(@"- (void)_willResignActive");
-  
   if (@available(iOS 11.0, *)) {
     [_webView takeSnapshotWithConfiguration:nil completionHandler:^(UIImage * _Nullable snapshotImage, NSError * _Nullable error) {
       _snapshotImageView.image = snapshotImage;
@@ -206,9 +204,7 @@ struct winsize __winSizeFromJSON(NSDictionary *json) {
   if (_webView.superview) {
     return;
   }
-  
-  NSLog(@"- (void)_delayedDidBecomeActive");
-  
+
   [self insertSubview:_webView belowSubview:_snapshotImageView];
   [_snapshotImageView removeFromSuperview];
   [self setNeedsLayout];
@@ -611,7 +607,7 @@ struct winsize __winSizeFromJSON(NSDictionary *json) {
 - (NSString *)_detectFontFamilyFromContent:(NSString *)content
 {
   NSRegularExpression *regex = [NSRegularExpression
-                                regularExpressionWithPattern:@"font-family:\\s*(.+);"
+                                regularExpressionWithPattern:@"font-family:\\s*([^;]+);"
                                 options:NSRegularExpressionCaseInsensitive
                                 error:nil];
   __block NSString *result = nil;
