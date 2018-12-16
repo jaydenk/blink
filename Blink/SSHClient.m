@@ -153,6 +153,7 @@ int __ssh_auth_fn(const char *prompt, char *buf, size_t len,
   }
   
   _ssh_callbacks.userdata = NULL;
+  _doExit = YES;
 }
 
 - (void)dealloc {
@@ -284,6 +285,10 @@ int __ssh_auth_fn(const char *prompt, char *buf, size_t len,
   [_runLoop runMode:NSDefaultRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.1]];
 }
 
+- (BOOL)_notConnected {
+  return _doExit || !ssh_is_connected(_session);
+}
+
 
 #pragma mark - CONNECT
 
@@ -407,7 +412,7 @@ int __ssh_auth_fn(const char *prompt, char *buf, size_t len,
   
   int maxPartialAuths = 5;
   
-  for (int i = 0; i <  maxPartialAuths; i++) {
+  for (int i = 0; i < maxPartialAuths; i++) {
     [self _log_verbose:[NSString stringWithFormat:@"using auth methods attempt: %@ of %@\n", @(i + 1), @(maxPartialAuths)]];
     
     // 3. get auth methods from server
@@ -468,7 +473,7 @@ int __ssh_auth_fn(const char *prompt, char *buf, size_t len,
 
 - (int)_auth_none {
   for (;;) {
-    if (_doExit) {
+    if ([self _notConnected]) {
       return SSH_ERROR;
     }
     
@@ -530,15 +535,56 @@ int __ssh_auth_fn(const char *prompt, char *buf, size_t len,
       continue;
     }
     
-    NSString *user = _options[SSHOptionUser];
     bool tryNextIdentityFile = NO;
+    
     for (;;) {
-      if (_doExit) {
+      if ([self _notConnected]) {
+        ssh_key_free(pkey);
         return SSH_ERROR;
       }
-      rc = ssh_userauth_publickey(_session, user.UTF8String, pkey);
+      rc = ssh_userauth_try_publickey(_session, NULL, pkey);
+      switch (rc) {
+        case SSH_AUTH_ERROR:
+          break;
+        case SSH_AUTH_SUCCESS:
+          break;
+        case SSH_AUTH_AGAIN:
+          [self _poll];
+          continue;
+        case SSH_AUTH_DENIED:
+          tryNextIdentityFile = YES;
+          break;
+        case SSH_AUTH_PARTIAL: {
+          int methods = ssh_userauth_list(_session, NULL);
+          tryNextIdentityFile = methods & SSH_AUTH_METHOD_PUBLICKEY;
+          break;
+        }
+        
+      }
+      break;
+    }
+    
+    if (tryNextIdentityFile) {
+      ssh_key_free(pkey);
+      continue;
+    }
+    
+    if (rc != SSH_AUTH_SUCCESS) {
+      ssh_key_free(pkey);
+      return rc;
+    }
+    
+    tryNextIdentityFile = NO;
+    
+    for (;;) {
+      if ([self _notConnected]) {
+        ssh_key_free(pkey);
+        return SSH_ERROR;
+      }
+      rc = ssh_userauth_publickey(_session, NULL, pkey);
       switch (rc) {
         case SSH_AUTH_SUCCESS:
+          ssh_key_free(pkey);
           return rc;
         case SSH_AUTH_AGAIN:
           [self _poll];
@@ -556,9 +602,13 @@ int __ssh_auth_fn(const char *prompt, char *buf, size_t len,
       }
       break;
     }
+    
+    ssh_key_free(pkey);
+    
     if (tryNextIdentityFile) {
       continue;
     }
+    
     break;
   }
   
@@ -568,7 +618,7 @@ int __ssh_auth_fn(const char *prompt, char *buf, size_t len,
 - (int)_auth_with_password:(NSString *)password prompts:(int)promptsCount {
   
   for (;;) {
-    if (_doExit) {
+    if ([self _notConnected]) {
       return SSH_ERROR;
     }
     
@@ -601,7 +651,7 @@ int __ssh_auth_fn(const char *prompt, char *buf, size_t len,
 - (int)_auth_with_interactive_with_password:(NSString *)password prompts:(int)promptsCount {
   // https://gitlab.com/libssh/libssh-mirror/blob/master/doc/authentication.dox#L124
   for (;;) {
-    if (_doExit) {
+    if ([self _notConnected]) {
       return SSH_ERROR;
     }
     
@@ -665,26 +715,67 @@ int __ssh_auth_fn(const char *prompt, char *buf, size_t len,
 
 #pragma mark - HOST VERIFICATION
 
-- (int)_verify_known_host {
-  char *hexa;
+- (const NSString *)_keyTypeNameForKey:(ssh_key) ssh_key {
+  enum ssh_keytypes_e type = ssh_key_type(ssh_key);
+  switch (type) {
+    case SSH_KEYTYPE_DSS:
+      return BK_KEYTYPE_DSA;
+    case SSH_KEYTYPE_RSA:
+    case SSH_KEYTYPE_RSA1:
+      return BK_KEYTYPE_RSA;
+    case SSH_KEYTYPE_ECDSA:
+      return BK_KEYTYPE_ECDSA;
+    case SSH_KEYTYPE_ED25519:
+      return BK_KEYTYPE_Ed25519;
+    default:
+      return @(ssh_key_type_to_char(type));
+  }
+}
+
+- (NSString *)_pubkeyFingerPrint:(ssh_key) ssh_key {
   unsigned char *hash = NULL;
   size_t hlen;
+  int rc = ssh_get_publickey_hash(ssh_key,
+                              SSH_PUBLICKEY_HASH_SHA256,
+                              &hash,
+                              &hlen);
+  if (rc < 0) {
+    return nil;
+  }
+  
+  char *fingerprint = ssh_get_fingerprint_hash(SSH_PUBLICKEY_HASH_SHA256, hash, hlen);
+  ssh_clean_pubkey_hash(&hash);
+  
+  if (!fingerprint) {
+    return nil;
+  }
+  
+  NSString *result = @(fingerprint);
+  ssh_string_free_char(fingerprint);
+  
+  return result;
+}
+
+- (int)_verify_known_host {
   ssh_key srv_pubkey;
   int rc;
-  
-  
+
   rc = ssh_get_server_publickey(_session, &srv_pubkey);
   if (rc < 0) {
     return rc;
   }
   
-  rc = ssh_get_publickey_hash(srv_pubkey,
-                              SSH_PUBLICKEY_HASH_SHA1,
-                              &hash,
-                              &hlen);
+  NSString *fingerprint = [self _pubkeyFingerPrint:srv_pubkey];
+  
+  NSString *fingerprintMsg = [NSString stringWithFormat:@"%@ key fingerprint is %@.",
+                              [self _keyTypeNameForKey:srv_pubkey],
+                              fingerprint];
+  
   ssh_key_free(srv_pubkey);
-  if (rc < 0) {
-    return rc;
+  
+  
+  if (!fingerprint) {
+    return SSH_ERROR;
   }
   
   enum ssh_known_hosts_e state = ssh_session_is_known_server(_session);
@@ -698,47 +789,42 @@ int __ssh_auth_fn(const char *prompt, char *buf, size_t len,
   
   switch(state) {
     case SSH_KNOWN_HOSTS_CHANGED:
-      [self _log_info:@"Host key for server changed : server's one is now :"];
-      ssh_print_hexa("Public key hash",hash, hlen);
-      ssh_clean_pubkey_hash(&hash);
-      [self _log_info:@"For security reason, connection will be stopped"];
+      [self _device_log_info:@"Host key for server changed."];
+      [self _device_log_info:fingerprintMsg];
+      [self _device_log_info:@"For security reason, connection will be stopped"];
       return SSH_ERROR;
     case SSH_KNOWN_HOSTS_OTHER:
-      [self _log_info:@"The host key for this server was not found but an other type of key exists."];
-      [self _log_info:@"An attacker might change the default server key to confuse your client"];
-      [self _log_info:@"into thinking the key does not exist"];
-      [self _log_info:@"For security reason, connection will be stopped"];
+      [self _device_log_info:@"The host key for this server was not found but an other type of key exists."];
+      [self _device_log_info:@"An attacker might change the default server key to confuse your client"];
+      [self _device_log_info:@"into thinking the key does not exist"];
+      [self _device_log_info:@"For security reason, connection will be stopped"];
       return SSH_ERROR;
     case SSH_KNOWN_HOSTS_NOT_FOUND:
-      [self _log_info: [
+      [self _device_log_info: [
         @[@"Could not find known host file. If you accept the host key here.",
           @"the file will be automatically created."]
           componentsJoinedByString:@"\n"] ];
 //      FALL_THROUGH;
     case SSH_KNOWN_HOSTS_UNKNOWN: {
-      hexa = ssh_get_hexa(hash, hlen);
-      [self _log_info: [NSString stringWithFormat:@"Public key hash: %s", hexa]];
-      ssh_string_free_char(hexa);
+      [self _device_log_info: fingerprintMsg];
       
       NSNumber * doEcho = @(YES);
       NSString *answer = [[[self _getAnswersWithName:@""
-                                         instruction:@"The server is unknown. Do you trust the host key?"
-                                          andPrompts:@[@[@" (yes/no):", doEcho]]] firstObject] lowercaseString];
+                                         instruction:@"The server is unknown."
+                                          andPrompts:@[@[@"Do you trust the host key? (yes/no):", doEcho]]] firstObject] lowercaseString];
       
       if ([answer isEqual:@"yes"] || [answer isEqual:@"y"]) {
         
       } else {
-        ssh_clean_pubkey_hash(&hash);
         return SSH_ERROR;
       }
       
       answer = [[[self _getAnswersWithName:@""
-                               instruction:@"This new key will be written on disk for further usage. do you agree?"
-                                andPrompts:@[@[@" (yes/no):", doEcho]]] firstObject] lowercaseString];
+                               instruction:@"This new key will be written on disk for further usage."
+                                andPrompts:@[@[@"Do you agree? (yes/no):", doEcho]]] firstObject] lowercaseString];
       
       if ([answer isEqual:@"yes"] || [answer isEqual:@"y"]) {
         if (ssh_write_knownhost(_session) < 0) {
-          ssh_clean_pubkey_hash(&hash);
           [self _log_error];
           return SSH_ERROR;
         }
@@ -746,13 +832,11 @@ int __ssh_auth_fn(const char *prompt, char *buf, size_t len,
     }
       break;
     case SSH_KNOWN_HOSTS_ERROR:
-      ssh_clean_pubkey_hash(&hash);
       [self _log_error];
       return SSH_ERROR;
     case SSH_KNOWN_HOSTS_OK:
       break; /* ok */
   }
-  ssh_clean_pubkey_hash(&hash);
       
   return SSH_OK;
 }
@@ -791,7 +875,7 @@ int __ssh_auth_fn(const char *prompt, char *buf, size_t len,
   int rc = SSH_ERROR;
 
   for (;;) {
-    if (_doExit) {
+    if ([self _notConnected]) {
       return SSH_ERROR;
     }
     
@@ -816,7 +900,7 @@ int __ssh_auth_fn(const char *prompt, char *buf, size_t len,
   ssh_channel_set_blocking(channel, 0);
   
   for (;;) {
-    if (_doExit) {
+    if ([self _notConnected]) {
       return SSH_ERROR;
     }
     rc = ssh_channel_open_session(channel);
@@ -855,7 +939,7 @@ int __ssh_auth_fn(const char *prompt, char *buf, size_t len,
 
   NSString *remoteCommand = _options[SSHOptionRemoteCommand];
   for (;;) {
-    if (_doExit) {
+    if ([self _notConnected]) {
       ssh_channel_close(channel);
       ssh_channel_free(channel);
       return SSH_ERROR;
@@ -901,7 +985,7 @@ int __ssh_auth_fn(const char *prompt, char *buf, size_t len,
     }
     
     for(;;) {
-      if (_doExit) {
+      if ([self _notConnected]) {
         return;
       }
       int rc = ssh_channel_request_env(channel, varName.UTF8String, varValue);
@@ -931,7 +1015,7 @@ int __ssh_auth_fn(const char *prompt, char *buf, size_t len,
   ssh_channel channel = ssh_channel_new(_session);
   
   for (;;) {
-    if (_doExit) {
+    if ([self _notConnected]) {
       ssh_channel_free(channel);
       return SSH_ERROR;
     }
@@ -980,7 +1064,7 @@ int __ssh_auth_fn(const char *prompt, char *buf, size_t len,
   ssh_channel channel = ssh_channel_new(_session);
   
   for (;;) {
-    if (_doExit) {
+    if ([self _notConnected]) {
       ssh_channel_free(channel);
       return;
     }
@@ -1047,7 +1131,7 @@ int __ssh_auth_fn(const char *prompt, char *buf, size_t len,
   sourcehost = [parts lastObject] ?: @"localhost";
   
   for (;;) {
-    if (_doExit) {
+    if ([self _notConnected]) {
       return SSH_ERROR;
     }
     
@@ -1144,6 +1228,13 @@ int __ssh_auth_fn(const char *prompt, char *buf, size_t len,
   __write(_fdOut, @"\r\n");
 }
 
+- (void)_device_log_info:(NSString *)message {
+  if (_killed) {
+    return;
+  }
+  [_device writeOutLn:message];
+}
+
 - (void)_log_verbose:(NSString *)message {
   if (_killed) {
     return;
@@ -1173,7 +1264,7 @@ int __ssh_auth_fn(const char *prompt, char *buf, size_t len,
 }
 
 - (void)_on_server_keep_alive {
-  if (_doExit) {
+  if ([self _notConnected]) {
     return;
   }
   ssh_client_send_keepalive(_session);
