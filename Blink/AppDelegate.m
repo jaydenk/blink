@@ -33,6 +33,7 @@
 #import "Migrator.h"
 #import "BKiCloudSyncHandler.h"
 #import "BKTouchIDAuthManager.h"
+#import "TermController.h"
 #import "ScreenController.h"
 #import "BlinkPaths.h"
 #import "BKDefaults.h"
@@ -40,6 +41,7 @@
 #import "BKHosts.h"
 #import <ios_system/ios_system.h>
 #include <libssh/callbacks.h>
+#include "xcall.h"
 
 
 @import CloudKit;
@@ -271,6 +273,21 @@ void __setupProcessEnv() {
 
 - (BOOL)application:(UIApplication *)app openURL:(NSURL *)url options:(NSDictionary<UIApplicationOpenURLOptionsKey,id> *)options
 {
+  // TODO: secure call with a key parameter
+  if ([url.host isEqualToString:@"run"]) {
+    NSURLComponents *components = [NSURLComponents componentsWithURL:url resolvingAgainstBaseURL:YES];
+    NSArray * items = components.queryItems;
+    NSURLQueryItem *item = [[items filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"name == %@", @"cmd"]] firstObject];
+    NSString *cmd = item.value ?: @"help";
+
+    NSUserActivity * activity = [[NSUserActivity alloc] initWithActivityType:BKUserActivityTypeCommandLine];
+    activity.eligibleForPublicIndexing = NO;
+    [activity setTitle:[NSString stringWithFormat:@"run: %@ ", cmd]];
+    [activity setUserInfo:@{BKUserActivityCommandLineKey: cmd}];
+    [[[ScreenController shared] mainScreenRootViewController] restoreUserActivityState:activity];
+    return YES;
+  }
+  blink_handle_url(url);
   // What we can do useful?
   return YES;
 }

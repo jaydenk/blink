@@ -87,7 +87,6 @@ NSString * const BKUserActivityCommandLineKey = @"com.blink.cmdline.key";
     activity.eligibleForPrediction = YES;
   }
   
-  
   _activityKey = [NSString stringWithFormat:@"run: %@ ", cmdLine];
   [activity setTitle:_activityKey];
   
@@ -129,15 +128,12 @@ NSString * const BKUserActivityCommandLineKey = @"com.blink.cmdline.key";
   if ([_session isRunningCmd] || !cmdLine) {
     return;
   }
+  
   char ctrlA = 'a' - 'a' + 1;
   char ctrlK = 'k' - 'a' + 1;
   // delete all input on current line - ctrl+a ctrl+k
   // run command
-  if (self.userActivity) {
-    [_termDevice write:[NSString stringWithFormat:@"%c%c%@\n", ctrlA, ctrlK, cmdLine]];
-  } else {
-    self.userActivity = activity;
-  }
+  [_termDevice write:[NSString stringWithFormat:@"%c%c%@\n", ctrlA, ctrlK, cmdLine]];
 }
 
 - (void)viewDidLoad
