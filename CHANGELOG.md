@@ -1,10 +1,17 @@
 # Version 12.8
 
-## Changes in Build 88
+## Changes in Build 97
 
-* Added xcall command for x-callback-url protocol.
+* Fixed system wide font selection. #701, 704
+* Added configuration views for x-callback-url.
+* New font size measure algorithm. #702, #668
+* Added Iosevka font.
+* Added `config delete-activities all` command. #700
 * Fixed missing host in siri shortcuts. #592
+* Added xcall command for x-callback-url protocol.
 * Added blinkshell://run?cmd=<> url handling.
+
+Huge thanks to @toph-allen, @Kamik423, @comfortablynick, @Harwood and @maurizio-manuguerra-mq.
 
 
 # Version 12.7

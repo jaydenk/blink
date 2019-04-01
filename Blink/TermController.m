@@ -76,8 +76,14 @@ NSString * const BKUserActivityCommandLineKey = @"com.blink.cmdline.key";
   return _termDevice.view.title;
 }
 
-- (void)indexCommand:(NSString *)cmdLine {
+- (void)indexCommand:(NSString *)originalCmdLine {
+  NSString *cmdLine = [
+                        [NSString stringWithFormat:@"%@", originalCmdLine]
+                            stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
   
+  if ([cmdLine hasPrefix:@"config "] || [cmdLine isEqualToString:@"config"]) {
+    return;
+  }
   NSUserActivity * activity = [[NSUserActivity alloc] initWithActivityType:BKUserActivityTypeCommandLine];
   activity.eligibleForPublicIndexing = NO;
   activity.eligibleForSearch = YES;
@@ -85,12 +91,13 @@ NSString * const BKUserActivityCommandLineKey = @"com.blink.cmdline.key";
   
   if (@available(iOS 12.0, *)) {
     activity.eligibleForPrediction = YES;
+    activity.persistentIdentifier = cmdLine;
   }
   
   _activityKey = [NSString stringWithFormat:@"run: %@ ", cmdLine];
   [activity setTitle:_activityKey];
   
-  _activityUserInfo = @{BKUserActivityCommandLineKey: cmdLine ?: @"help"};
+  _activityUserInfo = @{BKUserActivityCommandLineKey: cmdLine ? [cmdLine copy] : @"help"};
   
   activity.userInfo = _activityUserInfo;
   
@@ -133,7 +140,9 @@ NSString * const BKUserActivityCommandLineKey = @"com.blink.cmdline.key";
   char ctrlK = 'k' - 'a' + 1;
   // delete all input on current line - ctrl+a ctrl+k
   // run command
-  [_termDevice write:[NSString stringWithFormat:@"%c%c%@\n", ctrlA, ctrlK, cmdLine]];
+  if (self.userActivity) {
+    [_termDevice write:[NSString stringWithFormat:@"%c%c%@\n", ctrlA, ctrlK, cmdLine]];
+  }
 }
 
 - (void)viewDidLoad
